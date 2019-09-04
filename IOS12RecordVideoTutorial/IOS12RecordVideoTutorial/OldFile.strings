@@ -1,0 +1,217 @@
+/* 
+  OldFile.strings
+  IOS12RecordVideoTutorial
+
+  Created by trioangle on 27/08/19.
+  Copyright © 2019 Arthur Knopper. All rights reserved.
+*/
+
+/***
+ 
+ //
+ //  ViewController.swift
+ //  Camera
+ //
+ //  Created by Rizwan on 16/06/17.
+ //  Copyright © 2017 Rizwan. All rights reserved.
+ //
+ 
+ import UIKit
+ import AVFoundation
+ 
+ class ViewController: UIViewController {
+ 
+ @IBOutlet weak var previewView: UIView!
+ // @IBOutlet weak var captureButton: UIButton!
+ @IBOutlet weak var messageLabel: UILabel!
+ @IBOutlet weak var lbl_seconds: UILabel!
+ @IBOutlet weak var captureButton: KYShutterButton!
+ 
+ enum FlashMode{
+ case on
+ case off
+ }
+ 
+ fileprivate var flashMode: FlashMode = .on
+ 
+ var captureSession = AVCaptureSession()
+ var previewLayer = AVCaptureVideoPreviewLayer()
+ var movieOutput = AVCaptureMovieFileOutput()
+ var videoCaptureDevice : AVCaptureDevice?
+ var counterTime:Timer?
+ 
+ var count = 10
+ 
+ @objc func update() {
+ if(count > 0) {
+ DispatchQueue.main.async {
+ self.count -= 1
+ self.lbl_seconds.text = "\(self.count)"
+ }
+ }else{
+ //Stop Video Recording, if reached to zero, user allowed maximum 30 sec
+ self.onTapVideoRecord(self.captureButton)
+ }
+ }
+ 
+ 
+ 
+ override func viewDidLoad() {
+ super.viewDidLoad()
+ avCaptureVideoSetUp(position: .front)
+ }
+ 
+ // Find a camera with the specified AVCaptureDevicePosition, returning nil if one is not found
+ 
+ func avCaptureVideoSetUp(position: AVCaptureDevice.Position){
+ if let deviceDescoverySession:AVCaptureDevice.DiscoverySession = AVCaptureDevice.DiscoverySession.init(deviceTypes: [AVCaptureDevice.DeviceType.builtInWideAngleCamera],
+ mediaType: AVMediaType.video,
+ position: AVCaptureDevice.Position.unspecified) {
+ for device in deviceDescoverySession.devices {
+ if device.hasMediaType(AVMediaType.video) {
+ if device .position == position{
+ videoCaptureDevice = device
+ }
+ }
+ }
+ 
+ if let inputs = captureSession.inputs as? [AVCaptureDeviceInput] {
+ for input in inputs {
+ captureSession.removeInput(input)
+ }
+ }
+ 
+ 
+ if videoCaptureDevice != nil {
+ do {
+ // Add Video Input
+ try self.captureSession.addInput(AVCaptureDeviceInput(device: videoCaptureDevice!))
+ // Get Audio Device
+ let audioInput = AVCaptureDevice.default(for: .audio)!
+ //Add Audio Input
+ // try self.captureSession.addInput(AVCaptureDeviceInput(device: audioInput))
+ if captureSession.inputs.isEmpty {
+ self.captureSession.addInput(try AVCaptureDeviceInput(device: audioInput))
+ }
+ self.previewLayer = AVCaptureVideoPreviewLayer(session: self.captureSession)
+ previewLayer.videoGravity = AVLayerVideoGravity.resizeAspectFill
+ previewLayer.connection?.videoOrientation = AVCaptureVideoOrientation.portrait
+ self.previewView.layer.addSublayer(self.previewLayer)
+ //Add File Output
+ self.captureSession.addOutput(self.movieOutput)
+ captureSession.startRunning()
+ }catch {
+ print(error)
+ }
+ }
+ }else{
+ 
+ }
+ }
+ 
+ fileprivate func preView(){
+ let bounds: CGRect = self.previewView.layer.bounds
+ previewLayer.videoGravity = AVLayerVideoGravity.resizeAspectFill
+ previewLayer.bounds = bounds
+ previewLayer.position = CGPoint(x: bounds.midX, y: bounds.midY)
+ }
+ 
+ override func viewDidLayoutSubviews() {
+ super.viewDidLayoutSubviews()
+ self.preView()
+ }
+ 
+ func recordVideoAction() {
+ if movieOutput.isRecording {
+ movieOutput.stopRecording()
+ self.captureSession.stopRunning()
+ } else {
+ 
+ let paths = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)
+ let fileUrl = paths[0].appendingPathComponent("output.mov")
+ try? FileManager.default.removeItem(at: fileUrl)
+ movieOutput.startRecording(to: fileUrl, recordingDelegate: self as AVCaptureFileOutputRecordingDelegate)
+ }
+ }
+ 
+ @IBAction func onTapVideoRecord(_ sender: KYShutterButton) {
+ switch sender.buttonState {
+ case .normal:
+ counterTime =  Timer.scheduledTimer(timeInterval: 1.0, target: self, selector: #selector(update), userInfo: nil, repeats: true)
+ sender.buttonState = .recording
+ self.recordVideoAction()
+ 
+ case .recording:
+ counterTime?.invalidate()
+ self.recordVideoAction()
+ sender.buttonState = .normal
+ }
+ 
+ }
+ @IBAction func onTapTakePhoto(_ sender: Any) {
+ // Make sure capturePhotoOutput is valid
+ }
+ 
+ @IBAction func turnFlashToggleAction(_ sender: Any) {
+ 
+  switch flashMode {
+ case .on:
+ self.toggleTorch(on: true)
+ case .off:
+ self.toggleTorch(on: false)
+ }
+ 
+ flashMode = flashMode == .on ? .off: .on
+ 
+
+}
+
+// Find a camera with the specified AVCaptureDevicePosition, returning nil if one is not found
+func cameraWithPosition(position: AVCaptureDevice.Position) -> AVCaptureDevice? {
+    let discoverySession = AVCaptureDevice.DiscoverySession(deviceTypes: [.builtInWideAngleCamera], mediaType: AVMediaType.video, position: .unspecified)
+    for device in discoverySession.devices {
+        if device.position == position {
+            return device
+        }
+    }
+    
+    return nil
+}
+
+//Flash on Off
+//MARK: FLASH UITLITY METHODS
+func toggleTorch(on: Bool) {
+    guard let device = AVCaptureDevice.default(for: .video) else { return }
+    
+    if device.hasTorch {
+        do {
+            try device.lockForConfiguration()
+            
+            if on == true {
+                device.torchMode = .on
+            } else {
+                device.torchMode = .off
+            }
+            
+            device.unlockForConfiguration()
+        } catch {
+            print("Torch could not be used")
+        }
+    } else {
+        print("Torch is not available")
+    }
+}
+
+}
+
+extension ViewController : AVCaptureFileOutputRecordingDelegate {
+    func fileOutput(_ output: AVCaptureFileOutput, didFinishRecordingTo outputFileURL: URL, from connections: [AVCaptureConnection], error: Error?) {
+        if error == nil {
+            UISaveVideoAtPathToSavedPhotosAlbum(outputFileURL.path, nil, nil, nil)
+        }
+        print("error save \(String(describing: error))  === success \(outputFileURL) == ")
+    }
+    
+}
+
+*/
